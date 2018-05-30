@@ -1,0 +1,70 @@
+---
+#  vim: filetype=ansible
+- name: Create instance at EC2
+  hosts: localhost
+  connection: local
+  gather_facts: False
+  vars_files:
+    - "~/.aws-test-vars.yml"
+  vars_prompt:
+    - name: instance_full_name
+      prompt: "Name of created instance"
+  tasks:
+    - name: Find latest 18.04 AMI
+      ec2_ami_facts:
+        region: "{{ aws_region }}"
+        filters:
+          name: "ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server*"
+      register: ami_find
+
+    - name: Create instance
+      ec2:
+        key_name: "{{ aws_login_key_name }}"
+        assign_public_ip: yes
+        image: "{{ ami_find.images[0].image_id }}"
+        instance_tags:
+          Name: "{{ instance_full_name }}"
+          role: aws-test
+        instance_type: t2.medium
+        region: "{{ aws_region }}"
+        zone: "{{ aws_region }}{{ aws_zone }}"
+        user_data: "#cloud-config\nhostname: {{ instance_full_name }}"
+        volumes:
+          - device_name: /dev/xvda
+            delete_on_termination: true
+            volume_size: 20
+            volume_type: gp2
+        wait: yes
+        vpc_subnet_id: "{{ aws_subnet_id }}"
+        group_id:
+          - "{{ aws_securitygroup_id }}"
+      register: created_instance
+
+    - name: Add instance to inventory
+      add_host:
+        name: "{{ created_instance.instances[0].public_ip }}"
+        groups:
+          - "aws-test"
+
+    - name: Wait for SSH to respond
+      wait_for:
+        host: "{{ created_instance.instances[0].public_ip }}"
+        port: 22
+        timeout: 600
+        state: started
+
+- name: Initial instance configuration
+  hosts: "aws-test"
+  become: true
+  remote_user: ubuntu
+  gather_facts: true
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  pre_tasks:
+    - name: Gather facts
+      setup:
+    - name: Setup python2
+      shell: "apt update; apt install -y python2.7-minimal python-apt python3-apt"
+
+- name: Do main configuration
+  import_playbook: site.yml override_user=ubuntu

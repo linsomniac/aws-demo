@@ -1,0 +1,8 @@
+---
+#  vim: filetype=ansible
+- hosts: "aws-test"
+  remote_user: "{{ override_user | default(omit) }}"
+  become: true
+  roles:
+    - base
+    - mysql8

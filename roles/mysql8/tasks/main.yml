@@ -1,0 +1,49 @@
+---
+- name: Apt keys
+  apt_key:
+    id: 5072E1F5
+    data: "{{ lookup('file', 'mysql8-apt-key.asc') }}"
+
+- name: Repositories
+  apt_repository:
+    repo: "{{ item }}"
+    state: present
+    filename: mysql8
+  with_items:
+    - "deb http://repo.mysql.com/apt/ubuntu/ {{ ansible_distribution_release }} mysql-apt-config"
+    - "deb http://repo.mysql.com/apt/ubuntu/ {{ ansible_distribution_release }} mysql-8.0"
+
+- name: Packages
+  apt:
+    name: "{{ item.name }}"
+  with_items:
+    - name: mysql-apt-config
+    - name: mysql-community-client
+    - name: mysql-community-server
+    - name: python-mysqldb
+
+- name: Clone Employee sample database
+  git:
+    dest: /var/spool/employees-sample-database
+    repo: https://github.com/datacharmer/test_db.git
+    update: no
+
+- name: Fix relative pathnames
+  replace:
+    path: /var/spool/employees-sample-database/employees.sql
+    regexp: '(\s+source )([^/].*)'
+    replace: '\1/var/spool/employees-sample-database/\2'
+    backup: yes
+
+- name: Create employees database
+  mysql_db:
+    name: employees
+    state: present
+  register: employees_database_create
+
+- name: Load employees database
+  mysql_db:
+    name: employees
+    state: import
+    target: /var/spool/employees-sample-database/employees.sql
+  when: employees_database_create is changed
