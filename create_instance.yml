@@ -15,13 +15,17 @@
         region: "{{ aws_region }}"
         filters:
           name: "ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server*"
-      register: ami_find
+      register: ami_image_list
+
+    - name: Find the latest image
+      set_fact:
+        latest_ami: "{{ ami_image_list.images | sort(attribute='creation_date') | last }}"
 
     - name: Create instance
       ec2:
         key_name: "{{ aws_login_key_name }}"
         assign_public_ip: yes
-        image: "{{ ami_find.images[0].image_id }}"
+        image: "{{ latest_ami }}"
         instance_tags:
           Name: "{{ instance_full_name }}"
           role: aws-test
